@@ -104,7 +104,6 @@ const StudyFormStepper = () => {
   const { id } = useParams(); // For editing existing protocols
 
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const fetchProtocol = async () => {
       try {
