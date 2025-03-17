@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useFormState } from 'react-hook-form';
 import { Formik, Form } from 'formik';
 import {
   Box,
@@ -65,10 +64,12 @@ const initialValues = {
 };
 
 const OperationInputForm = ({ onSubmit, initialData = {}, loading = false }) => {
-  // const [submitError, setSubmitError] = useState(null);
-  // const [submitSuccess, setSubmitSuccess] = useState(false);
-  // const [isSubmitting, setIsSubmitting] = useState(false);
-  const { setSubmitError, setSubmitSuccess, setIsSubmitting } = useFormState();
+  // eslint-disable-next-line no-unused-vars
+  const [submitError, setSubmitError] = useState(null);
+  // eslint-disable-next-line no-unused-vars
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  // eslint-disable-next-line no-unused-vars
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [existingProtocol, setExistingProtocol] = useState(null);
   const navigate = useNavigate();
