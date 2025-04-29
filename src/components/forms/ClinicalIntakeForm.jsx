@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Formik, Form, FieldArray } from 'formik';
 import * as Yup from 'yup';
 import {
@@ -12,45 +12,61 @@ import {
   FormControlLabel,
   Divider,
   IconButton,
+  Checkbox,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
 } from '@mui/material';
-import { Add as AddIcon, Remove as RemoveIcon } from '@mui/icons-material';
+import { Add as AddIcon, Remove as RemoveIcon, CloudUpload as CloudUploadIcon } from '@mui/icons-material';
+import axios from 'axios';
+import API_ENDPOINTS from '../../config/api';
 
 // Validation Schema
 const validationSchema = Yup.object({
   study_identification: Yup.object({
-    study_title: Yup.string().required('Required'),
     protocol_number: Yup.string().required('Required'),
+    alternate_study_identifiers: Yup.string(),
     version_number_date: Yup.string().required('Required'),
+    ind_number: Yup.string(),
+    eudract_number: Yup.string(),
     sponsor_name: Yup.string().required('Required'),
-    cro: Yup.string(),
   }),
   study_overview: Yup.object({
     therapeutic_area: Yup.string().required('Required'),
     disease_indication: Yup.string().required('Required'),
     study_phase: Yup.string().required('Required'),
     study_type: Yup.string().required('Required'),
+    trial_intervention_model: Yup.string().required('Required'),
+    control_method: Yup.string().required('Required'),
+    trial_type: Yup.string().required('Required'),
     randomization: Yup.boolean().required('Required'),
     blinding: Yup.string().required('Required'),
-    primary_objective: Yup.string().required('Required'),
-    secondary_objectives: Yup.string(),
+    number_of_study_parts: Yup.string(),
+    stratification_factors: Yup.string(),
+    participant_input_into_design: Yup.string(),
+  }),
+  endpoints_objectives: Yup.object({
+    primary_objective_endpoints: Yup.string().required('Required'),
+    key_secondary_objectives_endpoints: Yup.string(),
+    secondary_objectives_endpoints: Yup.string(),
+    exploratory_objectives_endpoints: Yup.string(),
   }),
   target_population: Yup.object({
-    patient_population_description: Yup.string().required('Required'),
-    key_inclusion_criteria: Yup.array().of(Yup.string()),
-    key_exclusion_criteria: Yup.array().of(Yup.string()),
+    conditions_related_to_primary_disease: Yup.string().required('Required'),
+    tissue_sample_procedure_compliance: Yup.string(),
+    patient_performance_status: Yup.string(),
+    concomitant_meds_washout: Yup.string(),
+    comorbidities_infections: Yup.string(),
+    reproductive_status_contraception: Yup.string(),
+    eligibility_criteria: Yup.string(),
   }),
   study_treatments: Yup.object({
-    investigational_product: Yup.object({
-      name: Yup.string().required('Required'),
-      dose_schedule: Yup.string().required('Required'),
-      route_of_administration: Yup.string().required('Required'),
-    }),
-    comparator: Yup.object({
-      name: Yup.string(),
-      dose_schedule: Yup.string(),
-      route_of_administration: Yup.string(),
-    }),
+    regimen_arm_1: Yup.string(),
+    regimen_arm_2: Yup.string(),
+    regimen_arm_3: Yup.string(),
     concomitant_medications_allowed: Yup.string(),
+    concomitant_medications_prohibited: Yup.string(),
   }),
   study_endpoints: Yup.object({
     primary_endpoints: Yup.array().of(Yup.string()),
@@ -102,45 +118,67 @@ const validationSchema = Yup.object({
     }),
   }),
   additional_comments: Yup.string(),
+  document_uploads: Yup.object({
+    primary_documents: Yup.object({
+      investigator_brochure: Yup.boolean(),
+      label: Yup.boolean(),
+      additional_reports: Yup.boolean(),
+    }),
+    supporting_documents: Yup.object({
+      pharmacy_manual: Yup.boolean(),
+      risk_management_guidelines: Yup.boolean(),
+      user_defined: Yup.boolean(),
+    }),
+    study_design_outline: Yup.boolean(),
+  }),
 });
 
 // Initial values setup
 const getInitialValues = (initialData) => {
-  return {
+  const defaultValues = {
     study_identification: {
-      study_title: '',
       protocol_number: '',
+      alternate_study_identifiers: '',
       version_number_date: '',
+      ind_number: '',
+      eudract_number: '',
       sponsor_name: '',
-      cro: '',
     },
     study_overview: {
       therapeutic_area: '',
       disease_indication: '',
       study_phase: '',
       study_type: '',
+      trial_intervention_model: '',
+      control_method: '',
+      trial_type: '',
       randomization: false,
       blinding: '',
-      primary_objective: '',
-      secondary_objectives: '',
+      number_of_study_parts: '',
+      stratification_factors: '',
+      participant_input_into_design: '',
+    },
+    endpoints_objectives: {
+      primary_objective_endpoints: '',
+      key_secondary_objectives_endpoints: '',
+      secondary_objectives_endpoints: '',
+      exploratory_objectives_endpoints: '',
     },
     target_population: {
-      patient_population_description: '',
-      key_inclusion_criteria: [''],
-      key_exclusion_criteria: [''],
+      conditions_related_to_primary_disease: '',
+      tissue_sample_procedure_compliance: '',
+      patient_performance_status: '',
+      concomitant_meds_washout: '',
+      comorbidities_infections: '',
+      reproductive_status_contraception: '',
+      eligibility_criteria: '',
     },
     study_treatments: {
-      investigational_product: {
-        name: '',
-        dose_schedule: '',
-        route_of_administration: '',
-      },
-      comparator: {
-        name: '',
-        dose_schedule: '',
-        route_of_administration: '',
-      },
+      regimen_arm_1: '',
+      regimen_arm_2: '',
+      regimen_arm_3: '',
       concomitant_medications_allowed: '',
+      concomitant_medications_prohibited: '',
     },
     study_endpoints: {
       primary_endpoints: [''],
@@ -192,12 +230,56 @@ const getInitialValues = (initialData) => {
       },
     },
     additional_comments: '',
-    ...initialData
+    document_uploads: {
+      primary_documents: {
+        investigator_brochure: false,
+        label: false,
+        additional_reports: false,
+      },
+      supporting_documents: {
+        pharmacy_manual: false,
+        risk_management_guidelines: false,
+        user_defined: false,
+      },
+      study_design_outline: false,
+      uploaded_files: {
+        investigator_brochure: [],
+        label: [],
+        additional_reports: [],
+        pharmacy_manual: [],
+        risk_management_guidelines: [],
+        user_defined: [],
+        study_design_outline: [],
+      }
+    }
   };
+
+  // Deep merge the default values with initialData
+  const mergedValues = deepMerge(defaultValues, initialData || {});
+  return mergedValues;
+};
+
+// Helper function for deep merging objects
+const deepMerge = (target, source) => {
+  const output = { ...target };
+  if (source) {
+    Object.keys(source).forEach(key => {
+      if (source[key] instanceof Object && !Array.isArray(source[key])) {
+        output[key] = deepMerge(target[key] || {}, source[key]);
+      } else {
+        output[key] = source[key];
+      }
+    });
+  }
+  return output;
 };
 
 // Component function
 const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [isParsing, setIsParsing] = useState(false);
+
   // Merge initialData with default values
   const startingValues = getInitialValues(initialData);
 
@@ -205,6 +287,83 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
     console.log('Submitting form with values:', values); // Debug log
     onSubmit(values);
     setSubmitting(false);
+  };
+
+  const handleFileUpload = async (file, documentType, setFieldValue, values) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('documentType', documentType);
+
+    try {
+      const response = await axios.post(API_ENDPOINTS.documents.upload, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.data.success) {
+        const fileInfo = {
+          filename: response.data.file.filename,
+          originalname: file.name,
+          documentType: documentType
+        };
+        setUploadedFiles(prev => [...prev, fileInfo]);
+        const updatedFiles = [...values.document_uploads.uploaded_files[documentType], response.data.file];
+        setFieldValue(`document_uploads.uploaded_files.${documentType}`, updatedFiles);
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      alert(`Error uploading file: ${error.response?.data?.details || error.message}`);
+    }
+  };
+
+  const handleDoneWithUploading = async (setFieldValue, values) => {
+    if (uploadedFiles.length === 0) {
+      alert('Please upload at least one document before proceeding.');
+      return;
+    }
+
+    setIsParsing(true);
+    try {
+      // Format the files array to include only necessary information
+      const formattedFiles = uploadedFiles.map(file => ({
+        filename: file.filename,
+        originalname: file.originalname,
+        documentType: file.documentType
+      }));
+
+      console.log('Sending files for parsing:', formattedFiles);
+      
+      // Create form fields structure
+      const formFields = {
+        study_identification: Object.keys(values.study_identification),
+        study_overview: Object.keys(values.study_overview),
+        endpoints_objectives: Object.keys(values.endpoints_objectives),
+        target_population: Object.keys(values.target_population),
+        study_treatments: Object.keys(values.study_treatments)
+      };
+      
+      console.log('Form fields structure:', formFields);
+
+      const response = await axios.post(API_ENDPOINTS.ai.parseDocuments, {
+        files: formattedFiles,
+        formFields
+      });
+
+      if (response.data.success) {
+        // Update form values with parsed data
+        Object.entries(response.data.parsedData).forEach(([section, fields]) => {
+          Object.entries(fields).forEach(([field, value]) => {
+            setFieldValue(`${section}.${field}`, value || 'Not Provided');
+          });
+        });
+      }
+    } catch (error) {
+      console.error('Error parsing documents:', error);
+      alert('Error parsing documents. Please fill the form manually.');
+    } finally {
+      setIsParsing(false);
+    }
   };
 
   // JSX Component
@@ -216,24 +375,362 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
     >
       {({ values, errors, touched, handleChange, handleBlur, handleSubmit, isSubmitting, setFieldValue }) => (
         <Form onSubmit={handleSubmit}>
+          {/* Document Upload Section */}
+          <Box sx={{ mb: 4 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Document Upload Section
+            </Typography>
+            
+            {/* Primary Documents */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                1. Primary Documents
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        name="document_uploads.primary_documents.investigator_brochure"
+                        checked={values.document_uploads.primary_documents.investigator_brochure}
+                        onChange={handleChange}
+                      />
+                    }
+                    label="Investigator Brochure"
+                  />
+                  {values.document_uploads.primary_documents.investigator_brochure && (
+                    <Box sx={{ ml: 4 }}>
+                      <input
+                        type="file"
+                        multiple
+                        onChange={(e) => {
+                          Array.from(e.target.files).forEach(file => {
+                            handleFileUpload(file, 'investigator_brochure', setFieldValue, values);
+                          });
+                        }}
+                        style={{ display: 'none' }}
+                        id="investigator-brochure-upload"
+                      />
+                      <label htmlFor="investigator-brochure-upload">
+                        <Button
+                          variant="outlined"
+                          component="span"
+                          startIcon={<CloudUploadIcon />}
+                        >
+                          Upload Files
+                        </Button>
+                      </label>
+                      <List>
+                        {values.document_uploads.uploaded_files.investigator_brochure.map((file, index) => (
+                          <ListItem key={index}>
+                            <ListItemText primary={file.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        name="document_uploads.primary_documents.label"
+                        checked={values.document_uploads.primary_documents.label}
+                        onChange={handleChange}
+                      />
+                    }
+                    label="Label"
+                  />
+                  {values.document_uploads.primary_documents.label && (
+                    <Box sx={{ ml: 4 }}>
+                      <input
+                        type="file"
+                        multiple
+                        onChange={(e) => {
+                          Array.from(e.target.files).forEach(file => {
+                            handleFileUpload(file, 'label', setFieldValue, values);
+                          });
+                        }}
+                        style={{ display: 'none' }}
+                        id="label-upload"
+                      />
+                      <label htmlFor="label-upload">
+                        <Button
+                          variant="outlined"
+                          component="span"
+                          startIcon={<CloudUploadIcon />}
+                        >
+                          Upload Files
+                        </Button>
+                      </label>
+                      <List>
+                        {values.document_uploads.uploaded_files.label.map((file, index) => (
+                          <ListItem key={index}>
+                            <ListItemText primary={file.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        name="document_uploads.primary_documents.additional_reports"
+                        checked={values.document_uploads.primary_documents.additional_reports}
+                        onChange={handleChange}
+                      />
+                    }
+                    label="Additional Safety/Efficacy Reports"
+                  />
+                  {values.document_uploads.primary_documents.additional_reports && (
+                    <Box sx={{ ml: 4 }}>
+                      <input
+                        type="file"
+                        multiple
+                        onChange={(e) => {
+                          Array.from(e.target.files).forEach(file => {
+                            handleFileUpload(file, 'additional_reports', setFieldValue, values);
+                          });
+                        }}
+                        style={{ display: 'none' }}
+                        id="additional-reports-upload"
+                      />
+                      <label htmlFor="additional-reports-upload">
+                        <Button
+                          variant="outlined"
+                          component="span"
+                          startIcon={<CloudUploadIcon />}
+                        >
+                          Upload Files
+                        </Button>
+                      </label>
+                      <List>
+                        {values.document_uploads.uploaded_files.additional_reports.map((file, index) => (
+                          <ListItem key={index}>
+                            <ListItemText primary={file.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
+                </Grid>
+              </Grid>
+            </Box>
+
+            {/* Supporting Documents */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                2. Supporting Documents
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        name="document_uploads.supporting_documents.pharmacy_manual"
+                        checked={values.document_uploads.supporting_documents.pharmacy_manual}
+                        onChange={handleChange}
+                      />
+                    }
+                    label="Pharmacy Manual"
+                  />
+                  {values.document_uploads.supporting_documents.pharmacy_manual && (
+                    <Box sx={{ ml: 4 }}>
+                      <input
+                        type="file"
+                        multiple
+                        onChange={(e) => {
+                          Array.from(e.target.files).forEach(file => {
+                            handleFileUpload(file, 'pharmacy_manual', setFieldValue, values);
+                          });
+                        }}
+                        style={{ display: 'none' }}
+                        id="pharmacy-manual-upload"
+                      />
+                      <label htmlFor="pharmacy-manual-upload">
+                        <Button
+                          variant="outlined"
+                          component="span"
+                          startIcon={<CloudUploadIcon />}
+                        >
+                          Upload Files
+                        </Button>
+                      </label>
+                      <List>
+                        {values.document_uploads.uploaded_files.pharmacy_manual.map((file, index) => (
+                          <ListItem key={index}>
+                            <ListItemText primary={file.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        name="document_uploads.supporting_documents.risk_management_guidelines"
+                        checked={values.document_uploads.supporting_documents.risk_management_guidelines}
+                        onChange={handleChange}
+                      />
+                    }
+                    label="Risk Management Guidelines"
+                  />
+                  {values.document_uploads.supporting_documents.risk_management_guidelines && (
+                    <Box sx={{ ml: 4 }}>
+                      <input
+                        type="file"
+                        multiple
+                        onChange={(e) => {
+                          Array.from(e.target.files).forEach(file => {
+                            handleFileUpload(file, 'risk_management_guidelines', setFieldValue, values);
+                          });
+                        }}
+                        style={{ display: 'none' }}
+                        id="risk-management-upload"
+                      />
+                      <label htmlFor="risk-management-upload">
+                        <Button
+                          variant="outlined"
+                          component="span"
+                          startIcon={<CloudUploadIcon />}
+                        >
+                          Upload Files
+                        </Button>
+                      </label>
+                      <List>
+                        {values.document_uploads.uploaded_files.risk_management_guidelines.map((file, index) => (
+                          <ListItem key={index}>
+                            <ListItemText primary={file.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        name="document_uploads.supporting_documents.user_defined"
+                        checked={values.document_uploads.supporting_documents.user_defined}
+                        onChange={handleChange}
+                      />
+                    }
+                    label="User Defined"
+                  />
+                  {values.document_uploads.supporting_documents.user_defined && (
+                    <Box sx={{ ml: 4 }}>
+                      <input
+                        type="file"
+                        multiple
+                        onChange={(e) => {
+                          Array.from(e.target.files).forEach(file => {
+                            handleFileUpload(file, 'user_defined', setFieldValue, values);
+                          });
+                        }}
+                        style={{ display: 'none' }}
+                        id="user-defined-upload"
+                      />
+                      <label htmlFor="user-defined-upload">
+                        <Button
+                          variant="outlined"
+                          component="span"
+                          startIcon={<CloudUploadIcon />}
+                        >
+                          Upload Files
+                        </Button>
+                      </label>
+                      <List>
+                        {values.document_uploads.uploaded_files.user_defined.map((file, index) => (
+                          <ListItem key={index}>
+                            <ListItemText primary={file.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
+                </Grid>
+              </Grid>
+            </Box>
+
+            {/* Study Design Outline */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                3. Study Design Outline
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        name="document_uploads.study_design_outline"
+                        checked={values.document_uploads.study_design_outline}
+                        onChange={handleChange}
+                      />
+                    }
+                    label="Study Design Outline Document"
+                  />
+                  {values.document_uploads.study_design_outline && (
+                    <Box sx={{ ml: 4 }}>
+                      <input
+                        type="file"
+                        multiple
+                        onChange={(e) => {
+                          Array.from(e.target.files).forEach(file => {
+                            handleFileUpload(file, 'study_design_outline', setFieldValue, values);
+                          });
+                        }}
+                        style={{ display: 'none' }}
+                        id="study-design-upload"
+                      />
+                      <label htmlFor="study-design-upload">
+                        <Button
+                          variant="outlined"
+                          component="span"
+                          startIcon={<CloudUploadIcon />}
+                        >
+                          Upload Files
+                        </Button>
+                      </label>
+                      <List>
+                        {values.document_uploads.uploaded_files.study_design_outline.map((file, index) => (
+                          <ListItem key={index}>
+                            <ListItemText primary={file.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
+                </Grid>
+              </Grid>
+            </Box>
+
+            {uploadedFiles.length > 0 && (
+              <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => handleDoneWithUploading(setFieldValue, values)}
+                  disabled={isParsing}
+                >
+                  {isParsing ? 'Parsing Documents...' : 'Done with Uploading'}
+                </Button>
+              </Box>
+            )}
+          </Box>
+
+          <Divider sx={{ my: 4 }} />
+
           {/* Study Identification Section */}
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
               1. Study Identification
             </Typography>
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  name="study_identification.study_title"
-                  label="Study Title"
-                  value={values.study_identification.study_title}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  error={touched.study_identification?.study_title && Boolean(errors.study_identification?.study_title)}
-                  helperText={touched.study_identification?.study_title && errors.study_identification?.study_title}
-                />
-              </Grid>
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
@@ -249,13 +746,43 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
+                  name="study_identification.alternate_study_identifiers"
+                  label="Alternate Study Identifiers"
+                  value={values.study_identification.alternate_study_identifiers}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
                   name="study_identification.version_number_date"
-                  label="Version Number/Date"
+                  label="Version Number and Date"
                   value={values.study_identification.version_number_date}
                   onChange={handleChange}
                   onBlur={handleBlur}
                   error={touched.study_identification?.version_number_date && Boolean(errors.study_identification?.version_number_date)}
                   helperText={touched.study_identification?.version_number_date && errors.study_identification?.version_number_date}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  name="study_identification.ind_number"
+                  label="IND Number"
+                  value={values.study_identification.ind_number}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  name="study_identification.eudract_number"
+                  label="EudraCT Number"
+                  value={values.study_identification.eudract_number}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
@@ -270,16 +797,6 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
                   helperText={touched.study_identification?.sponsor_name && errors.study_identification?.sponsor_name}
                 />
               </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  name="study_identification.cro"
-                  label="CRO (if applicable)"
-                  value={values.study_identification.cro}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                />
-              </Grid>
             </Grid>
           </Box>
 
@@ -288,7 +805,7 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
           {/* Study Overview Section */}
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              2. Study Overview
+              2. Study Overview and Design
             </Typography>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
@@ -307,7 +824,7 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
                 <TextField
                   fullWidth
                   name="study_overview.disease_indication"
-                  label="Disease Indication (e.g., Type of Cancer)"
+                  label="Disease Indication"
                   value={values.study_overview.disease_indication}
                   onChange={handleChange}
                   onBlur={handleBlur}
@@ -318,7 +835,7 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  select
+                  
                   name="study_overview.study_phase"
                   label="Study Phase"
                   value={values.study_overview.study_phase}
@@ -327,11 +844,7 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
                   error={touched.study_overview?.study_phase && Boolean(errors.study_overview?.study_phase)}
                   helperText={touched.study_overview?.study_phase && errors.study_overview?.study_phase}
                 >
-                  {['Phase I', 'Phase II', 'Phase III', 'Phase IV'].map((phase) => (
-                    <MenuItem key={phase} value={phase}>
-                      {phase}
-                    </MenuItem>
-                  ))}
+                  
                 </TextField>
               </Grid>
               <Grid item xs={12} md={6}>
@@ -356,21 +869,38 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  select
-                  name="study_overview.blinding"
-                  label="Blinding"
-                  value={values.study_overview.blinding}
+                  name="study_overview.trial_intervention_model"
+                  label="Trial Intervention Model"
+                  value={values.study_overview.trial_intervention_model}
                   onChange={handleChange}
                   onBlur={handleBlur}
-                  error={touched.study_overview?.blinding && Boolean(errors.study_overview?.blinding)}
-                  helperText={touched.study_overview?.blinding && errors.study_overview?.blinding}
-                >
-                  {['Open-Label', 'Single-Blind', 'Double-Blind'].map((type) => (
-                    <MenuItem key={type} value={type}>
-                      {type}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                  error={touched.study_overview?.trial_intervention_model && Boolean(errors.study_overview?.trial_intervention_model)}
+                  helperText={touched.study_overview?.trial_intervention_model && errors.study_overview?.trial_intervention_model}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  name="study_overview.control_method"
+                  label="Control Method"
+                  value={values.study_overview.control_method}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  error={touched.study_overview?.control_method && Boolean(errors.study_overview?.control_method)}
+                  helperText={touched.study_overview?.control_method && errors.study_overview?.control_method}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  name="study_overview.trial_type"
+                  label="Type of Trial"
+                  value={values.study_overview.trial_type}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  error={touched.study_overview?.trial_type && Boolean(errors.study_overview?.trial_type)}
+                  helperText={touched.study_overview?.trial_type && errors.study_overview?.trial_type}
+                />
               </Grid>
               <Grid item xs={12} md={6}>
                 <FormControlLabel
@@ -384,28 +914,110 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
                   label="Randomization"
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  multiline
-                  rows={2}
-                  name="study_overview.primary_objective"
-                  label="Primary Objective"
-                  value={values.study_overview.primary_objective}
+                  
+                  name="study_overview.blinding"
+                  label="Blinding"
+                  value={values.study_overview.blinding}
                   onChange={handleChange}
                   onBlur={handleBlur}
-                  error={touched.study_overview?.primary_objective && Boolean(errors.study_overview?.primary_objective)}
-                  helperText={touched.study_overview?.primary_objective && errors.study_overview?.primary_objective}
+                  error={touched.study_overview?.blinding && Boolean(errors.study_overview?.blinding)}
+                  helperText={touched.study_overview?.blinding && errors.study_overview?.blinding}
+                >
+                  
+                </TextField>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  name="study_overview.number_of_study_parts"
+                  label="Number of Study Parts"
+                  value={values.study_overview.number_of_study_parts}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  name="study_overview.stratification_factors"
+                  label="Stratification Factors"
+                  value={values.study_overview.stratification_factors}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
                 />
               </Grid>
               <Grid item xs={12}>
                 <TextField
                   fullWidth
                   multiline
-                  rows={2}
-                  name="study_overview.secondary_objectives"
-                  label="Secondary Objectives"
-                  value={values.study_overview.secondary_objectives}
+                  rows={3}
+                  name="study_overview.participant_input_into_design"
+                  label="Participant Input into Design"
+                  value={values.study_overview.participant_input_into_design}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
+              </Grid>
+            </Grid>
+          </Box>
+
+          <Divider sx={{ my: 4 }} />
+
+          {/* Endpoints/Objectives Section */}
+          <Box sx={{ mb: 4 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              3. Endpoints/Objectives
+            </Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  name="endpoints_objectives.primary_objective_endpoints"
+                  label="Primary Objective/Endpoints"
+                  value={values.endpoints_objectives.primary_objective_endpoints}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  error={touched.endpoints_objectives?.primary_objective_endpoints && Boolean(errors.endpoints_objectives?.primary_objective_endpoints)}
+                  helperText={touched.endpoints_objectives?.primary_objective_endpoints && errors.endpoints_objectives?.primary_objective_endpoints}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  name="endpoints_objectives.key_secondary_objectives_endpoints"
+                  label="Key Secondary Objectives/Endpoints"
+                  value={values.endpoints_objectives.key_secondary_objectives_endpoints}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  name="endpoints_objectives.secondary_objectives_endpoints"
+                  label="Secondary Objectives/Endpoints"
+                  value={values.endpoints_objectives.secondary_objectives_endpoints}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  name="endpoints_objectives.exploratory_objectives_endpoints"
+                  label="Exploratory Objectives/Endpoints"
+                  value={values.endpoints_objectives.exploratory_objectives_endpoints}
                   onChange={handleChange}
                   onBlur={handleBlur}
                 />
@@ -418,7 +1030,7 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
           {/* Target Population Section */}
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              3. Target Population
+              4. Target Population
             </Typography>
             <Grid container spacing={3}>
               <Grid item xs={12}>
@@ -426,82 +1038,86 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
                   fullWidth
                   multiline
                   rows={3}
-                  name="target_population.patient_population_description"
-                  label="Patient Population Description"
-                  value={values.target_population.patient_population_description}
+                  name="target_population.conditions_related_to_primary_disease"
+                  label="Conditions related to primary disease"
+                  value={values.target_population.conditions_related_to_primary_disease}
                   onChange={handleChange}
                   onBlur={handleBlur}
-                  error={touched.target_population?.patient_population_description && Boolean(errors.target_population?.patient_population_description)}
-                  helperText={touched.target_population?.patient_population_description && errors.target_population?.patient_population_description}
+                  error={touched.target_population?.conditions_related_to_primary_disease && Boolean(errors.target_population?.conditions_related_to_primary_disease)}
+                  helperText={touched.target_population?.conditions_related_to_primary_disease && errors.target_population?.conditions_related_to_primary_disease}
                 />
               </Grid>
-              
-              {/* Inclusion Criteria */}
               <Grid item xs={12}>
-                <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                  Key Inclusion Criteria
-                </Typography>
-                <FieldArray name="target_population.key_inclusion_criteria">
-                  {({ push, remove }) => (
-                    <Box>
-                      {values.target_population.key_inclusion_criteria.map((_, index) => (
-                        <Box key={index} sx={{ display: 'flex', mb: 1 }}>
-                          <TextField
-                            fullWidth
-                            name={`target_population.key_inclusion_criteria.${index}`}
-                            label={`Criterion ${index + 1}`}
-                            value={values.target_population.key_inclusion_criteria[index]}
-                            onChange={handleChange}
-                            onBlur={handleBlur}
-                          />
-                          <IconButton onClick={() => remove(index)}>
-                            <RemoveIcon />
-                          </IconButton>
-                        </Box>
-                      ))}
-                      <Button
-                        startIcon={<AddIcon />}
-                        onClick={() => push('')}
-                      >
-                        Add Inclusion Criterion
-                      </Button>
-                    </Box>
-                  )}
-                </FieldArray>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  name="target_population.tissue_sample_procedure_compliance"
+                  label="Tissue sample or Procedure compliance requirements"
+                  value={values.target_population.tissue_sample_procedure_compliance}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
               </Grid>
-              
-              {/* Exclusion Criteria */}
               <Grid item xs={12}>
-                <Typography variant="subtitle1" sx={{ mb: 1, mt: 2 }}>
-                  Key Exclusion Criteria
-                </Typography>
-                <FieldArray name="target_population.key_exclusion_criteria">
-                  {({ push, remove }) => (
-                    <Box>
-                      {values.target_population.key_exclusion_criteria.map((_, index) => (
-                        <Box key={index} sx={{ display: 'flex', mb: 1 }}>
-                          <TextField
-                            fullWidth
-                            name={`target_population.key_exclusion_criteria.${index}`}
-                            label={`Criterion ${index + 1}`}
-                            value={values.target_population.key_exclusion_criteria[index]}
-                            onChange={handleChange}
-                            onBlur={handleBlur}
-                          />
-                          <IconButton onClick={() => remove(index)}>
-                            <RemoveIcon />
-                          </IconButton>
-                        </Box>
-                      ))}
-                      <Button
-                        startIcon={<AddIcon />}
-                        onClick={() => push('')}
-                      >
-                        Add Exclusion Criterion
-                      </Button>
-                    </Box>
-                  )}
-                </FieldArray>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  name="target_population.patient_performance_status"
+                  label="Patient performance status, Life expectancy, organ function and/or Lab parameter status"
+                  value={values.target_population.patient_performance_status}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  name="target_population.concomitant_meds_washout"
+                  label="Concomitant meds / wash-out for existing therapies"
+                  value={values.target_population.concomitant_meds_washout}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  name="target_population.comorbidities_infections"
+                  label="Comorbidities & infections"
+                  value={values.target_population.comorbidities_infections}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  name="target_population.reproductive_status_contraception"
+                  label="Reproductive status & contraception"
+                  value={values.target_population.reproductive_status_contraception}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  name="target_population.eligibility_criteria"
+                  label="Eligibility criteria which make patient eligible for any of the treatments"
+                  value={values.target_population.eligibility_criteria}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
               </Grid>
             </Grid>
           </Box>
@@ -511,89 +1127,65 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
           {/* Study Treatments Section */}
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              4. Study Treatments
+              5. Study Treatments/Arms
             </Typography>
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="subtitle1">Investigational Product (IP)</Typography>
-              </Grid>
-              <Grid item xs={12} md={4}>
                 <TextField
                   fullWidth
-                  name="study_treatments.investigational_product.name"
-                  label="Name"
-                  value={values.study_treatments.investigational_product.name}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  error={touched.study_treatments?.investigational_product?.name && Boolean(errors.study_treatments?.investigational_product?.name)}
-                  helperText={touched.study_treatments?.investigational_product?.name && errors.study_treatments?.investigational_product?.name}
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField
-                  fullWidth
-                  name="study_treatments.investigational_product.dose_schedule"
-                  label="Dose and Schedule"
-                  value={values.study_treatments.investigational_product.dose_schedule}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  error={touched.study_treatments?.investigational_product?.dose_schedule && Boolean(errors.study_treatments?.investigational_product?.dose_schedule)}
-                  helperText={touched.study_treatments?.investigational_product?.dose_schedule && errors.study_treatments?.investigational_product?.dose_schedule}
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField
-                  fullWidth
-                  name="study_treatments.investigational_product.route_of_administration"
-                  label="Route of Administration"
-                  value={values.study_treatments.investigational_product.route_of_administration}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  error={touched.study_treatments?.investigational_product?.route_of_administration && Boolean(errors.study_treatments?.investigational_product?.route_of_administration)}
-                  helperText={touched.study_treatments?.investigational_product?.route_of_administration && errors.study_treatments?.investigational_product?.route_of_administration}
-                />
-              </Grid>
-              
-              <Grid item xs={12} sx={{ mt: 2 }}>
-                <Typography variant="subtitle1">Comparator (if applicable)</Typography>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField
-                  fullWidth
-                  name="study_treatments.comparator.name"
-                  label="Name"
-                  value={values.study_treatments.comparator.name}
+                  multiline
+                  rows={3}
+                  name="study_treatments.regimen_arm_1"
+                  label="Regimen/Arm 1"
+                  value={values.study_treatments.regimen_arm_1}
                   onChange={handleChange}
                   onBlur={handleBlur}
                 />
               </Grid>
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  name="study_treatments.comparator.dose_schedule"
-                  label="Dose and Schedule"
-                  value={values.study_treatments.comparator.dose_schedule}
+                  multiline
+                  rows={3}
+                  name="study_treatments.regimen_arm_2"
+                  label="Regimen/Arm 2"
+                  value={values.study_treatments.regimen_arm_2}
                   onChange={handleChange}
                   onBlur={handleBlur}
                 />
               </Grid>
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  name="study_treatments.comparator.route_of_administration"
-                  label="Route of Administration"
-                  value={values.study_treatments.comparator.route_of_administration}
+                  multiline
+                  rows={3}
+                  name="study_treatments.regimen_arm_3"
+                  label="Regimen/Arm 3"
+                  value={values.study_treatments.regimen_arm_3}
                   onChange={handleChange}
                   onBlur={handleBlur}
                 />
               </Grid>
-              
-              <Grid item xs={12} sx={{ mt: 2 }}>
+              <Grid item xs={12}>
                 <TextField
                   fullWidth
+                  multiline
+                  rows={3}
                   name="study_treatments.concomitant_medications_allowed"
                   label="Concomitant Medications Allowed"
                   value={values.study_treatments.concomitant_medications_allowed}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  name="study_treatments.concomitant_medications_prohibited"
+                  label="Concomitant Medications Prohibited"
+                  value={values.study_treatments.concomitant_medications_prohibited}
                   onChange={handleChange}
                   onBlur={handleBlur}
                 />
@@ -606,7 +1198,7 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
           {/* Study Endpoints Section */}
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              5. Study Endpoints
+              6. Study Endpoints
             </Typography>
             <Grid container spacing={3}>
               {/* Primary Endpoints */}
@@ -718,7 +1310,7 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
           {/* Study Design Details Section */}
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              6. Study Design Details
+              7. Study Design Details
             </Typography>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
@@ -803,10 +1395,10 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
 
           <Divider sx={{ my: 4 }} />
 
-                    {/* Study Assessments Section */}
+          {/* Study Assessments Section */}
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              7. Study Assessments
+              8. Study Assessments
             </Typography>
             <Grid container spacing={3}>
               {/* Efficacy Assessments */}
@@ -918,7 +1510,7 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
           {/* Statistical Considerations Section */}
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              8. Statistical Considerations
+              9. Statistical Considerations
             </Typography>
             <Grid container spacing={3}>
               <Grid item xs={12}>
@@ -975,7 +1567,7 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
           {/* Regulatory Requirements Section */}
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              9. Regulatory Requirements
+              10. Regulatory Requirements
             </Typography>
             <Grid container spacing={3}>
               {/* Countries for Submission */}
@@ -1052,7 +1644,7 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
           {/* Study Monitoring Section */}
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              10. Study Monitoring
+              11. Study Monitoring
             </Typography>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
@@ -1127,7 +1719,7 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
           {/* Additional Comments Section */}
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              11. Additional Comments
+              12. Additional Comments
             </Typography>
             <Grid container spacing={3}>
               <Grid item xs={12}>
@@ -1153,7 +1745,7 @@ const ClinicalIntakeForm = ({ onSubmit, initialData }) => {
               color="primary"
               disabled={isSubmitting}
             >
-              Next
+              Submit
             </Button>
           </Box>
         </Form>
